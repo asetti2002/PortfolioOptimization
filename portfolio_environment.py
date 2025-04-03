@@ -7,18 +7,23 @@ import torch
 from .utils import get_weights_asTensors
 
 
-def PortfolioEnv(gymnasium.Env):
+class PortfolioEnv(gym.Env):
     def __init__(self,
                  data, 
                  agent_type,
                  short_positions=False,
                  continuous_weights=False,
                  rebalance_every=1,
+                 slippage=0.0,
+                 transaction_cost=0.0,
                  ):
         self.data = data
         self.agent_type = agent_type
-        self.action_space = None
+
+        self.action_space = self.get_action_space()
         # define action size
+        self.action_size = 0 #TODO
+
         self.current_weights = np.zeros(self.action_size)
         self.short_positions = short_positions
 
@@ -34,13 +39,17 @@ def PortfolioEnv(gymnasium.Env):
         self.returns_hold = None
         self.continuous_weights = continuous_weights
 
+        self.trajectory_bootstrapping = True # param
         self.trajectory_returns = []
+
+        self.reset()
 
     def get_action_space(self):
         if self.agent_type == 'discrete':
             pass
         elif self.agent_type == 'continuous':
             pass
+        
 
 
 
@@ -164,4 +173,40 @@ def PortfolioEnv(gymnasium.Env):
         self.current_trajectory_len = 0
         self.trajectory_returns = []
 
-        self.process
+        # TODO
+        self.process_indicator_types()
+        self.process_returns()
+
+
+        if self.trajectory_bootstrapping:
+            # randomly samples rebalancing dates from the remaining dates
+            # then it sorts them 
+            n_samples = 1 + self.max_trajectory_len // self.rebalance_every
+            self.rebalancing_dates = np.random.choice(self.available_dates[self.available_dates.index(self.current_rebalancing_date):], n_samples)
+            self.rebalancing_dates.sort()
+        else:
+            self.rebalancing_dates = self.rebalancing_dates[self.rebalancing_dates.index(self.current_rebalancing_date)::self.rebalance_every]
+        
+        self.next_rebalancing_date = self.rebalancing_dates[self.rebalancing_dates.index(self.current_rebalancing_date) + 1]
+
+
+        observation_frame = self.df_observations[self.available_dates[idx_lookback]:self.current_rebalancing_date]
+        observation_frame = self.expand_observation_frame(observation_frame)
+
+
+        info = dict()
+        info['indices'] = observation_frame.index.tolist()
+        info['features'] = observation_frame.columns.tolist()
+
+
+        # observations = None 
+        if self.render_mode == 'tile':
+            observations = torch.Tensor(observation_frame.values)
+        elif self.render_mode == 'vector':
+            observations = torch.Tensor(observation_frame.values.squeeze())
+        else: # this a tensor
+            observations = self.return_obs_frame_as_tensor(observation_frame)
+
+        return observations, info
+
+
