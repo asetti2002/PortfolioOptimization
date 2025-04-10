@@ -98,7 +98,10 @@ class PortfolioEnv(gymnasium.Env):
             raise Exception('Render mode must be either vector or tile')
 
     def calculate_reward(self, returns):
-        return torch.sum(torch.log(1 + returns))
+        # def calculate_reward(self, returns):
+        safe_returns = torch.clamp(returns, min=-0.999)  # ensure 1 + returns > 0
+        return torch.sum(torch.log1p(safe_returns))
+
     
     def preprocess_returns(self):
         instruments = set([col[0] for col in self.data_ohlc.columns])

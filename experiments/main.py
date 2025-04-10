@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 import torch
 import random
 
-from stable_baselines3 import PPO
+from stable_baselines3 import DDPG, PPO
 from stable_baselines3.common.env_checker import check_env
 
 # Import your custom environment.
@@ -19,7 +19,7 @@ def main():
     # --- Load OHLC Data from an H5 File ---
     # Replace 'data/data.h5' and 'instruments' with your actual file path and H5 key.
     df_ohlc = pd.read_hdf('data/data.h5', key='instruments')
-    df_ohlc = df_ohlc.dropna()
+    df_ohlc = df_ohlc.loc["2010-01-01":].dropna()
 
     # --- Create the Portfolio Environment ---
     env = PortfolioEnv(
@@ -43,8 +43,8 @@ def main():
     check_env(env)
 
     # --- Train a PPO Agent ---
-    model = PPO("MlpPolicy", env, verbose=1)
-    model.learn(total_timesteps=20000)
+    model = DDPG("MlpPolicy", env, verbose=1)
+    model.learn(total_timesteps=100000)
 
     # --- Run a Simulation with the Trained Policy ---
     obs, info = env.reset()
@@ -56,7 +56,7 @@ def main():
         action, _ = model.predict(obs, deterministic=True)
         obs, reward, terminated, truncated, info = env.step(action)
         done = terminated or truncated
-        cumulative_log_return += reward.item()
+        cumulative_log_return += reward
         portfolio_value = np.exp(cumulative_log_return)
         portfolio_values.append(portfolio_value)
 
@@ -69,6 +69,8 @@ def main():
     plt.grid(True)
     plt.legend()
     plt.show()
+
+
 
 if __name__ == "__main__":
     main()
