@@ -124,11 +124,19 @@ class PortfolioEnv(gymnasium.Env):
         if self.agent_type == 'discrete':
             self.new_weights = torch.zeros(self.action_size, dtype=torch.float32)
             self.new_weights[action] = 1.0
+
         elif self.agent_type == 'continuous':
             if self.short_positions:
                 self.new_weights = torch.tensor(action, dtype=torch.float32) - torch.tensor(action, dtype=torch.float32).mean()
             else:
-                self.new_weights = torch.tensor(action, dtype=torch.float32) / torch.tensor(action, dtype=torch.float32).sum()
+                # Use softmax to ensure positive weights summing to 1
+                action_tensor = torch.tensor(action, dtype=torch.float32)
+                self.new_weights = torch.nn.functional.softmax(action_tensor, dim=0)
+        # elif self.agent_type == 'continuous':
+        #     if self.short_positions:
+        #         self.new_weights = torch.tensor(action, dtype=torch.float32) - torch.tensor(action, dtype=torch.float32).mean()
+        #     else:
+        #         self.new_weights = torch.tensor(action, dtype=torch.float32) / torch.tensor(action, dtype=torch.float32).sum()
 
         effective_rebalancing_date = self.available_dates[
             self.available_dates.index(self.current_rebalancing_date) + 1]
@@ -168,9 +176,20 @@ class PortfolioEnv(gymnasium.Env):
             self.next_rebalancing_date = self.available_dates[
                 self.available_dates.index(self.current_rebalancing_date) + 1]
 
+        # if self.continuous_weights:
+        #     ret = torch.matmul(self.new_weights, R_hold.T)
+        #     ret[0] -= (self.transaction_cost + self.slippage)
+
+
         if self.continuous_weights:
             ret = torch.matmul(self.new_weights, R_hold.T)
-            ret[0] -= (self.transaction_cost + self.slippage)
+            r = self.calculate_reward(ret)
+            cost = self.transaction_cost + self.slippage
+            # Ensure cost is within valid range to avoid log(0)
+            if cost >= 1.0:
+                cost = 0.999  # Prevent invalid log
+            r += torch.log(torch.tensor(1.0 - cost, dtype=torch.float32))
+            reward = r.item()
         else:
             hold_weight, buy_weight, sell_weight = get_weights_asTensors(self.new_weights, self.current_weights)
             hold_return = torch.dot(hold_weight.squeeze(), r_hold)
@@ -196,7 +215,8 @@ class PortfolioEnv(gymnasium.Env):
             random.seed(seed)
             np.random.seed(seed)
             torch.manual_seed(seed)
-        self.current_rebalancing_date = random.choice(self.available_dates[:-self.rebalance_every - 1])
+        # self.current_rebalancing_date = random.choice(self.available_dates[:-self.rebalance_every - 1])
+        self.current_rebalancing_date = self.available_dates[0]
         self.current_trajectory_len = 0
         self.trajectory_returns = []
         self.preprocess_returns()

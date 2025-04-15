@@ -134,6 +134,9 @@ def normalize_price_window(df_price_window: pd.DataFrame, norm_pivot: str = 'win
 
 
 
-
-def get_weights_asTensors(new_weights, current_weights) -> torch.Tensor:
-    return torch.tensor(new_weights) - torch.tensor(current_weights).mean()
+def get_weights_asTensors(new_weights, current_weights) -> tuple:
+    w_delta = new_weights - current_weights
+    buy_weights = torch.clamp(w_delta, min=0.0)
+    sell_weights = torch.clamp(-w_delta, min=0.0)
+    hold_weights = torch.min(new_weights, current_weights)
+    return hold_weights, buy_weights, sell_weights
