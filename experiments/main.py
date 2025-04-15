@@ -9,68 +9,96 @@ import matplotlib.pyplot as plt
 import torch
 import random
 
-from stable_baselines3 import DDPG, PPO
+from stable_baselines3 import PPO, DDPG, A2C, SAC
 from stable_baselines3.common.env_checker import check_env
 
 # Import your custom environment.
 from environments.portfolio_environment import PortfolioEnv
 
-def main():
-    # --- Load OHLC Data from an H5 File ---
-    # Replace 'data/data.h5' and 'instruments' with your actual file path and H5 key.
-    df_ohlc = pd.read_hdf('data/data.h5', key='instruments')
-    df_ohlc = df_ohlc.loc["2010-01-01":].dropna()
-
-    # --- Create the Portfolio Environment ---
-    env = PortfolioEnv(
-        data_ohlc=df_ohlc,
-        agent_type='continuous',         # Use 'continuous' or 'discrete'
-        short_positions=False,
-        continuous_weights=True,           # Continuous weight updates.
-        allow_short_positions=True,
-        rebalance_every=1,
-        slippage=0.001,
-        transaction_cost=0.001,
-        render_mode='tile',                # Change to 'vector' if desired.
-        max_trajectory_len=252,            # One trading year (example).
-        observation_frame_lookback=5,
-        trajectory_bootstrapping=False,
-        episodic_instrument_shiftin=False,
-        verbose=0
-    )
-
-    # (Optional) Check that the environment follows the Gym API.
-    check_env(env)
-
-    # --- Train a PPO Agent ---
-    model = DDPG("MlpPolicy", env, verbose=1)
-    model.learn(total_timesteps=100000)
-
-    # --- Run a Simulation with the Trained Policy ---
+def run_simulation(model, env):
+    """Runs one simulation episode using a trained model on the given environment.
+    Returns a tuple of (date_list, portfolio_values)."""
     obs, info = env.reset()
     done = False
     cumulative_log_return = 0.0
     portfolio_values = []
+    date_list = []
 
     while not done:
         action, _ = model.predict(obs, deterministic=True)
         obs, reward, terminated, truncated, info = env.step(action)
         done = terminated or truncated
+        # Since reward is a float, add it directly.
         cumulative_log_return += reward
         portfolio_value = np.exp(cumulative_log_return)
         portfolio_values.append(portfolio_value)
+        # Using the last date from info as the current simulation date.
+        current_date = info['indices'][-1]
+        date_list.append(current_date)
 
-    # --- Plot the Cumulative Portfolio Value ---
-    plt.figure(figsize=(12, 8))
-    plt.plot(portfolio_values, marker='o', label="Portfolio Value")
-    plt.xlabel("Rebalancing Periods")
+    # Convert the date_list to DatetimeIndex if needed.
+    date_list = pd.to_datetime(date_list)
+    return date_list, portfolio_values
+
+def main():
+    # --- Load OHLC Data from an H5 File ---
+    df_ohlc = pd.read_hdf('data/data.h5', key='instruments')
+    # Ensure we use data from 1990 onward (your dataset may extend further)
+    df_ohlc = df_ohlc.loc["1990-01-01":].dropna()
+
+    # Define common environment parameters.
+    env_params = dict(
+        data_ohlc = df_ohlc,
+        agent_type = 'continuous',         # Using continuous action space
+        short_positions = True,
+        continuous_weights = True,
+        allow_short_positions = True,
+        rebalance_every = 1,
+        slippage = 0.001,
+        transaction_cost = 0.001,
+        render_mode = 'tile',               # or 'vector'
+        max_trajectory_len = 252 * 32,
+        observation_frame_lookback = 5,
+        trajectory_bootstrapping = False,
+        episodic_instrument_shiftin = False,
+        verbose = 1
+    )
+
+    # We will train three agents on separate environment instances
+    algorithms = {
+        # "PPO": PPO,
+        "DDPG": DDPG,
+        # "A2C": A2C,
+        # "SAC": SAC
+    }
+    
+    results = {}  # To store (date_list, portfolio_values) for each algorithm
+    
+    for algo_name, AlgoClass in algorithms.items():
+        print(f"\n--- Training {algo_name} ---\n")
+        # Create a fresh environment instance for this algorithm.
+        env_instance = PortfolioEnv(**env_params)
+        check_env(env_instance)  # Optionally validate the environment.
+        
+        # Create and train the model.
+        model = AlgoClass("MlpPolicy", env_instance, verbose=1)
+        # Adjust total_timesteps as needed.
+        model.learn(total_timesteps=200_000)
+        
+        # Run simulation (simulate one episode).
+        date_list, portfolio_values = run_simulation(model, env_instance)
+        results[algo_name] = (date_list, portfolio_values)
+    
+    # --- Plot the Cumulative Portfolio Value Over Time for each agent ---
+    plt.figure(figsize=(14, 8))
+    for algo_name, (date_list, portfolio_values) in results.items():
+        plt.plot(date_list, portfolio_values, marker='o', label=algo_name)
+    plt.xlabel("Date")
     plt.ylabel("Portfolio Value (Relative)")
-    plt.title("Cumulative Portfolio Value Over Time (Optimal Policy)")
+    plt.title("Cumulative Portfolio Value Over Time (Comparison of RL Algorithms)")
     plt.grid(True)
     plt.legend()
     plt.show()
-
-
 
 if __name__ == "__main__":
     main()
