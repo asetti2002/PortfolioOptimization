@@ -131,7 +131,7 @@ def main():
     # --- Load OHLC Data from an H5 File ---
     df_ohlc = pd.read_hdf('data/data.h5', key='instruments')
     # Ensure we use data from 1990 onward (your dataset may extend further)
-    df_ohlc = df_ohlc.loc["2016-01-01":].dropna()
+    df_ohlc = df_ohlc.loc["2017-01-01":].dropna()
 
     plot_ewp = True
 
@@ -155,9 +155,9 @@ def main():
 
     # We will train multiple agents on separate environment instances.
     algorithms = {
-        "PPO": PPO,
+        # "PPO": PPO,
         "DDPG": DDPG,
-        "A2C": A2C,
+        # "A2C": A2C,
         # "SAC": SAC
     }
     
@@ -174,7 +174,7 @@ def main():
         
         # Create and train the model (adjust total_timesteps as needed).
         model = AlgoClass("MlpPolicy", env_instance, verbose=1, device="cuda" if torch.cuda.is_available() else "cpu")
-        model.learn(total_timesteps=200_000)
+        model.learn(total_timesteps=1500)
 
         # Run simulation (simulate one episode)
         date_list, portfolio_values = run_simulation(model, env_instance)
