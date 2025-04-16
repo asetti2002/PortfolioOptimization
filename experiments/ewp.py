@@ -12,7 +12,7 @@ def ewp():
 # Convert the index to datetime if it isn't already, and filter to data from Jan 1, 2000 onwards.
     df = pd.read_hdf("data/data.h5", key="instruments")
     df.index = pd.to_datetime(df.index)
-    df = df.loc["1990-01-01":].dropna()
+    df = df.loc["2016-01-01":].dropna()
 
     # Get a list of instruments using the 'Close' price columns. 
     # (Adjust as needed if some columns should be excluded, like "CASH")
