@@ -14,14 +14,13 @@ class PortfolioEnv(gymnasium.Env):
                  continuous_weights=False,
                  allow_short_positions=True,
                  rebalance_every=1,
-                 slippage=0.0,
-                 transaction_cost=0.0,
+                 slippage=0.0001,
+                 transaction_cost=0.0001,
                  render_mode='tile',
                  max_trajectory_len=252,
                  observation_frame_lookback=0,
                  trajectory_bootstrapping=False,
-                 episodic_instrument_shiftin=False,
-                 verbose=0):
+                 ):
         # Set parameters first
         self.max_trajectory_len = max_trajectory_len
         self.observation_frame_lookback = observation_frame_lookback  # Set early!
@@ -69,33 +68,17 @@ class PortfolioEnv(gymnasium.Env):
         self.reset()
 
     def get_action_space(self):
-        if self.agent_type == 'discrete':
-            return Discrete(self.action_size)
-        elif self.agent_type == 'continuous':
-            low_bound = -np.ones(self.action_size) if self.allow_short_positions else np.zeros(self.action_size)
-            return Box(low=low_bound, high=np.ones(self.action_size))
-        else:
-            raise Exception('Invalid agent type')
+        low_bound = -np.ones(self.action_size) if self.allow_short_positions else np.zeros(self.action_size)
+        return Box(low=low_bound, high=np.ones(self.action_size))
 
     def get_observation_space(self):
-        if self.render_mode == 'vector':
-            lower_bound = np.tile(self.data_ohlc.min(axis=0).values,
-                                  (1 + self.observation_frame_lookback, 1)).squeeze()
-            upper_bound = np.tile(self.data_ohlc.max(axis=0).values,
-                                  (1 + self.observation_frame_lookback, 1)).squeeze()
-            return Box(low=lower_bound,
-                       high=upper_bound,
-                       shape=[1, (1 + self.observation_frame_lookback) * self.data_ohlc.shape[1]])
-        elif self.render_mode == 'tile':
-            lower_bound = np.tile(self.data_ohlc.min(axis=0).values,
-                                  (1 + self.observation_frame_lookback, 1))
-            upper_bound = np.tile(self.data_ohlc.max(axis=0).values,
-                                  (1 + self.observation_frame_lookback, 1))
-            return Box(low=lower_bound,
-                       high=upper_bound,
-                       shape=[1 + self.observation_frame_lookback, self.data_ohlc.shape[1]])
-        else:
-            raise Exception('Render mode must be either vector or tile')
+        lower_bound = np.tile(self.data_ohlc.min(axis=0).values,
+                                (1 + self.observation_frame_lookback, 1))
+        upper_bound = np.tile(self.data_ohlc.max(axis=0).values,
+                                (1 + self.observation_frame_lookback, 1))
+        return Box(low=lower_bound,
+                    high=upper_bound,
+                    shape=[1 + self.observation_frame_lookback, self.data_ohlc.shape[1]])
 
     def calculate_reward(self, returns):
         # def calculate_reward(self, returns):
@@ -121,17 +104,14 @@ class PortfolioEnv(gymnasium.Env):
 
     def step(self, action):
         self.current_weights = self.new_weights
-        if self.agent_type == 'discrete':
-            self.new_weights = torch.zeros(self.action_size, dtype=torch.float32)
-            self.new_weights[action] = 1.0
 
-        elif self.agent_type == 'continuous':
-            if self.short_positions:
-                self.new_weights = torch.tensor(action, dtype=torch.float32) - torch.tensor(action, dtype=torch.float32).mean()
-            else:
-                # Use softmax to ensure positive weights summing to 1
-                action_tensor = torch.tensor(action, dtype=torch.float32)
-                self.new_weights = torch.nn.functional.softmax(action_tensor, dim=0)
+        # elif self.agent_type == 'continuous':
+        if self.short_positions:
+            self.new_weights = torch.tensor(action, dtype=torch.float32) - torch.tensor(action, dtype=torch.float32).mean()
+        else:
+            # Use softmax to ensure positive weights summing to 1
+            action_tensor = torch.tensor(action, dtype=torch.float32)
+            self.new_weights = torch.nn.functional.softmax(action_tensor, dim=0)
         # elif self.agent_type == 'continuous':
         #     if self.short_positions:
         #         self.new_weights = torch.tensor(action, dtype=torch.float32) - torch.tensor(action, dtype=torch.float32).mean()
@@ -140,6 +120,7 @@ class PortfolioEnv(gymnasium.Env):
 
         effective_rebalancing_date = self.available_dates[
             self.available_dates.index(self.current_rebalancing_date) + 1]
+        
         r_sell = torch.tensor(self.returns_sell.loc[[effective_rebalancing_date]].values, dtype=torch.float32).squeeze()
         r_buy = torch.tensor(self.returns_buy.loc[[effective_rebalancing_date]].values, dtype=torch.float32).squeeze()
         r_hold = torch.tensor(self.returns_hold.loc[[effective_rebalancing_date]].values, dtype=torch.float32).squeeze()

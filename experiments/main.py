@@ -16,12 +16,17 @@ from stable_baselines3.common.env_checker import check_env
 from ewp import ewp
 # Import your custom environment.
 from environments.portfolio_environment import PortfolioEnv
+from sp500 import sp500
+
+
+# SEED = 
+# random.seed(SEED)
+# np.random.seed(SEED)
+# torch.manual_seed(SEED)
+# if torch.cuda.is_available():
+#     torch.cuda.manual_seed_all(SEED)
 
 def run_simulation(model, env):
-    """
-    Runs one simulation episode using a trained model on the given environment.
-    Returns a tuple of (date_list, portfolio_values).
-    """
     obs, info = env.reset()
     done = False
     cumulative_log_return = 0.0
@@ -46,28 +51,6 @@ def run_simulation(model, env):
     return date_list, portfolio_values
 
 def compute_metrics(portfolio_values, trading_days_per_year=252):
-    """
-    Compute the following metrics:
-    1) Annualized Return
-    2) Annualized Volatility
-    3) Sharpe Ratio (assuming risk-free rate = 0)
-    4) Sortino Ratio (assuming risk-free rate = 0)
-    5) Maximum Drawdown
-    
-    Args:
-        portfolio_values (list or np.ndarray): Sequence of portfolio values over time.
-        trading_days_per_year (int): The assumed number of trading days in a year.
-
-    Returns:
-        dict: A dictionary with keys:
-              {
-                'Annualized Return': float,
-                'Annualized Volatility': float,
-                'Sharpe Ratio': float,
-                'Sortino Ratio': float,
-                'Max Drawdown': float
-              }
-    """
     pv = np.array(portfolio_values, dtype=float)
     n = len(pv)
     if n < 2:
@@ -134,7 +117,7 @@ def main():
     df_ohlc = df_ohlc.loc["2017-01-01":].dropna()
 
     plot_ewp = True
-
+    plot_sandp500 = True
     # Common environment parameters (initial_balance defaults to 1e6 in your env)
     env_params = dict(
         data_ohlc = df_ohlc,
@@ -149,8 +132,8 @@ def main():
         max_trajectory_len = 252 * 8,
         observation_frame_lookback = 5,
         trajectory_bootstrapping = False,
-        episodic_instrument_shiftin = False,
-        verbose = 1
+        # episodic_instrument_shiftin = False,
+        # verbose = 1
     )
 
     # We will train multiple agents on separate environment instances.
@@ -204,6 +187,11 @@ def main():
         cumulative_value = ewp()
         plt.plot(cumulative_value.index, cumulative_value.values, label='Equally Weighted Portfolio')
     
+    if plot_sandp500:
+        # sp500() presumably returns a Series of the S&P 500 over time
+        cumulative_value, _ = sp500()
+        plt.plot(cumulative_value.index, cumulative_value.values, label='S&P 500')
+
     plt.xlabel("Date")
     plt.ylabel("Portfolio Value (Relative)")
     plt.title("Cumulative Portfolio Value Over Time (Comparison of RL Algorithms)")
@@ -214,7 +202,8 @@ def main():
     save_folder = "plots"
     if not os.path.exists(save_folder):
         os.makedirs(save_folder)
-    save_path = os.path.join(save_folder, "cumulative_portfolio_value_for_RL_agents_and_EWP.png")
+    # save_path = os.path.join(save_folder, "cumulative_portfolio_value_for_RL_agents_and_EWP.png")
+    save_path = os.path.join(save_folder, "S&P returns with DDPG.png")
     plt.savefig(save_path)
     print(f"\nPlot saved to {save_path}")
 
