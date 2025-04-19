@@ -14,7 +14,7 @@ To mitigate risk, the framework employs techniques like weight normalization via
 to avoid extreme losses, and the inclusion of costs that simulate real-world trad-
 ing constraints. 
 
-The optimal policy is learned using the Proximal Policy Optimization (PPO), A2C, and DDPG algorithms from Stable-Baselines3, where
+The optimal policy is learned using PPO, A2C, and DDPG algorithms from Stable-Baselines3, where
 the episodic setup (with clear termination and truncation conditions) aids in robust policy convergence over finite trading horizons. Preliminary experiments
 indicate a promising improvement in cumulative returns against baseline strategies while maintaining controlled risk exposure, suggesting a viable pathway for
 further research and live application in dynamic financial markets.
